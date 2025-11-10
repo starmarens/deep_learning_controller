@@ -1,0 +1,172 @@
+import numpy as np
+import pandas as pd
+
+path = r"i:\UCA\Robotics 1\deep_learning_controller\speed_data.csv"
+speed = pd.read_csv(path, usecols=[1])
+baud = pd.read_csv(path, usecols=[0])
+
+#print(data)
+
+speed_arr = speed.to_numpy(dtype=float)   # shape (n,1)
+baud_arr  = baud.to_numpy(dtype=float)    # shape (n,1)
+speed_max = np.max(speed_arr)
+speed_scaled = speed_arr / speed_max
+
+
+baud_max = np.max(baud_arr)
+baud_scaled = baud_arr / baud_max
+
+
+def linear(in_features, weights, biases):
+    """ Linear function
+    Args:
+        in_features: input feature matrix, 2d array with shape (# samples, # input features)
+        weights: weight parameter matrix, 2d array with shape (# next layer features , # input features)
+        biases: bias parameter vector, 2d array with shape (1, # next layer features)
+    Returns:
+        linear_output: linear model output feature matrix, 2d array with shape (# samples, # next layer features)
+    """
+    linear_output = np.dot(in_features,weights.T) + biases
+    return linear_output
+
+def sigmoid(z):
+    """ Sigmoid function
+    Args:
+        z: independent variable, could be an arrary of any shape or a scalar. 
+    Returns:
+        dependent variable, could be an arrary of any shape or a scalar. 
+    """
+    z = np.clip(z, -500, 500)
+    return 1 / (1 + np.exp(-z))
+
+def tanh(z):
+    return np.tanh(z)
+
+def init_params(in_dims, hidden_dims, out_dims):
+    """
+    Initialize the parameters of the MLP model.
+    Args:
+        in_dims: number of input dimensions.
+        hidden_dims: tuple of hidden layer dimensions.
+        out_dims: number of output dimensions.
+    Returns:
+        params: dictionary containing the initialized weights and biases.
+    """
+    layer_dims = (in_dims, *hidden_dims, out_dims)
+    params = {}
+    for l in range(len(layer_dims) - 1):
+        params[f'W{l+1}'] = np.random.normal(loc=0, scale=0.1, size=(layer_dims[l + 1], layer_dims[l]))
+        params[f'b{l+1}'] = np.random.normal(loc=0, scale=0.0001, size=(1, layer_dims[l + 1]))
+    return params
+
+def forward_MLP(in_features, params):
+    """ Forward function
+    Args:
+        in_features: feature matrix, 2d array with shape (# samples, # pixels)
+        params: a dictionary of weights and biases
+            params = {
+                'W_1': weight matrix of the first layer, 2d array with shape (# hidden features in 1st layer, # input features)
+                'b_1': bias vector of the first layer, 2d array with shape (1, # hidden features in 1st layer)
+                ...
+                'W_L': weight matrix of the last layer, 2d array with shape (# hidden features in output layer, # hidden features in L-1 layer)
+                'b_L': bias vector of the last layer, 2d array with shape (1, # output features)
+            }
+        hidden_activation: activation function for hidden layers, could be sigmoid, relu, etc. If None, no activation is applied.
+        out_activation: activation function for output layer, could be sigmoid, softmax, etc. If None, no activation is applied.
+    Returns:
+        predictions: predicted probabilities, a column vector or 2d array with shape (# samples, # output features)
+        cache: linear activated features
+    """
+
+    num_layers = len(params) // 2
+    # Input layer
+    cache = {'X0': in_features}
+    # Hidden layers
+    for i in range(num_layers - 1):
+        cache[f'Z{i+1}'] = linear(cache[f'X{i}'], params[f'W{i+1}'], params[f'b{i+1}'])
+        cache[f'X{i+1}'] = tanh(cache[f'Z{i+1}'])
+    # Output layer
+    cache[f'Z{num_layers}'] = linear(cache[f'X{num_layers-1}'], params[f'W{num_layers}'], params[f'b{num_layers}'])
+    predictions = sigmoid(cache[f'Z{num_layers}'])
+    return predictions, cache
+
+def forward_single_input(linear):
+    return tanh(linear)
+
+def grad(prediction, label, feature):
+    dw = np.mean((prediction - label) * feature)  # dL/dw
+    db = np.mean(prediction - label)  # dL/db
+    return dw, db
+
+def mse_loss(prediction, target):
+    """ Mean Square Error function
+    Args:
+        prediction: column vector of predictions, 2d-array with shape (# samples, 1)
+        target: column vector of ground truths, 2d-array with shape (# samples, 1)
+    Returns:
+        loss_value: scalar
+    """
+    loss_value = np.mean((prediction - target) ** 2)
+    return loss_value
+
+def d_sigmoid(x):
+    return sigmoid(x) * (1 - sigmoid(x))
+
+def d_tanh(z):
+ return 1 - np.tanh(z)**2
+
+
+def backward(predictions, labels, cache, params):
+    num_layers = len(params) // 2
+    grads = {f'dZ{num_layers}': predictions - labels}
+    for i in reversed(range(num_layers)):
+        grads[f'dW{i+1}'] = grads[f'dZ{i+1}'].T @ cache['X' + str(i)]
+        grads[f'db{i+1}'] = np.mean(grads[f'dZ{i+1}'], axis=0, keepdims=True)
+        if i==0:
+            break  
+        grads[f'dX{i}'] = grads[f'dZ{i+1}'] @ params[f'W{i+1}']
+        grads[f'dZ{i}'] = grads[f'dX{i}'] * d_sigmoid(cache[f'Z{i}'])
+    return grads
+
+
+def eval_MLP_model():
+    params = init_params(speed_scaled.shape[1],hidden_dims=(4,8),out_dims=baud_scaled.shape[1])
+    loss = []
+    num_iters = 200000
+    for i in range(num_iters):
+        prediction, cache = forward_MLP(speed_scaled, params)  # Added missing cache return value
+        loss.append(mse_loss(prediction, baud_scaled))
+        
+        # Add gradient update step (currently missing)
+        grads = backward(prediction, baud_scaled, cache, params)
+        
+        # Update parameters (add learning rate)
+        learning_rate = 0.003
+        for param_name in params:
+            grad_name = 'd' + param_name
+            params[param_name] -= learning_rate * grads[grad_name]
+    return loss, params
+
+def eval_1_model(weight, bias, iterations, in_features, validation, learning_rate):
+    loss = []
+    w = weight
+    b =bias
+    for i in range(iterations):
+        preds = forward_single_input(linear= linear(in_features, w, b))
+        dw,db = grad(preds, validation, in_features)
+        w = w -learning_rate * dw
+        b = b - learning_rate * db
+        mse = mse_loss(preds, validation)
+        if (i + 1) % 100 == 0 or i == iterations - 1:
+            print(f"loss @ {i+1} iteration: {mse:.6f}")
+        loss.append(mse)
+    return w, b
+    
+array = np.full(speed.shape, 0.4)
+
+loss, params = eval_MLP_model()
+
+#print(loss)
+
+speed, _ = forward_MLP(speed_scaled, params)
+print(np.array(speed, dtype= float) * baud_max)
