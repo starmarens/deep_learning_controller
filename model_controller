@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 
-path = r"i:\UCA\Robotics 1\deep_learning_controller\speed_data.csv"
+#path = r"i:\UCA\Robotics 1\deep_learning_controller\speed_data.csv"
+path = "/Users/georgelopez/classes/Robotics 1/deep_learning_controller/speed_data.csv"
 speed = pd.read_csv(path, usecols=[1])
 baud = pd.read_csv(path, usecols=[0])
 
