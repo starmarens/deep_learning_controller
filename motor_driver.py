@@ -38,7 +38,7 @@ if __name__ == "__main__":
     for i in range(60000):
         md.forward(i)
         print(f"f, dc: {i}%")
-        sleep(0.001)  # 4 seconds to ramp up
+        sleep()  # 4 seconds to ramp up
     for i in reversed(range(100)):
         md.forward((i + 1) / 100)
         print(f"f, dc: {i}%")
